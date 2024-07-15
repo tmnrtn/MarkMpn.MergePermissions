@@ -209,6 +209,7 @@ namespace MarkMpn.MergePermissions
                 Message = "Creating security role...",
                 Work = (worker, args) =>
                 {
+
                     // Find the root business unit
                     var qry = new QueryExpression("businessunit");
                     qry.Criteria.AddCondition("parentbusinessunitid", ConditionOperator.Null);
@@ -225,11 +226,12 @@ namespace MarkMpn.MergePermissions
                     var privileges = new List<RolePrivilege>();
 
                     // Global: Merge
-                    privileges.Add(new RolePrivilege
-                    {
-                        PrivilegeName = "prvMerge",
-                        Depth = PrivilegeDepth.Global
-                    });
+                    var prvQuery = new QueryExpression("privilege");
+                    prvQuery.ColumnSet = new ColumnSet("privilegeid");
+                    prvQuery.Criteria.AddCondition("name", ConditionOperator.Equal, "prvMerge");
+                    var privMerge = Service.RetrieveMultiple(prvQuery).Entities.FirstOrDefault();
+
+                    privileges.Add(new RolePrivilege((int)PrivilegeDepth.Global, privMerge.Id));
 
                     foreach (var entity in entities)
                     {
@@ -349,7 +351,8 @@ namespace MarkMpn.MergePermissions
         {
             // Main entity:
             // Read, Write, Share, AppendTo
-            var entity = ConnectionDetail.MetadataCache.Single(e => e.LogicalName == entityName);
+
+            var entity = ConnectionDetail.MetadataCacheLoader.Result.EntityMetadata.Single(e => e.LogicalName == entityName);
 
             AddEntityPrivilege(privileges, entity, PrivilegeType.Read, _depth);
             AddEntityPrivilege(privileges, entity, PrivilegeType.Write, _depth);
@@ -372,7 +375,7 @@ namespace MarkMpn.MergePermissions
             // If main entity can have activities, also include all activity types
             if (entity.HasActivities != false || entity.IsActivityParty != false)
             {
-                var activityEntities = ConnectionDetail.MetadataCache
+                var activityEntities = ConnectionDetail.MetadataCacheLoader.Result.EntityMetadata
                     .Where(e => e.IsActivity == true)
                     .Select(e => e.LogicalName);
 
@@ -381,7 +384,7 @@ namespace MarkMpn.MergePermissions
 
             foreach (var relatedEntityName in relatedEntities)
             {
-                var relatedEntity = ConnectionDetail.MetadataCache.Single(e => e.LogicalName == relatedEntityName);
+                var relatedEntity = ConnectionDetail.MetadataCacheLoader.Result.EntityMetadata.Single(e => e.LogicalName == relatedEntityName);
 
                 AddEntityPrivilege(privileges, relatedEntity, PrivilegeType.Append, _relatedDepth);
                 AddEntityPrivilege(privileges, relatedEntity, PrivilegeType.Write, _relatedDepth);
